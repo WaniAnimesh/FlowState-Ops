@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlowState Ops | AI Event Congestion Decision Support System</title>
+
+  <!-- Typography -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet Map Integration -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  
+  <!-- Chart.js + Annotation Plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
+
+  <style>
+    :root {
+      /* Light Theme Colors */
+      --bg-base: #f0f2f5;
+      --bg-panel: #ffffff;
+      
+      --border-solid: #e2e8f0;
+      --border-focus: #38bdf8;
+      
+      --text-main: #0f172a;
+      --text-muted: #475569; /* Darkened slightly for better readability */
+      
+      --primary: #0ea5e9;    /* Light Blue */
+      --secondary: #6366f1;  /* Indigo */
+      --success: #10b981;    /* Emerald */
+      --warning: #f59e0b;    /* Amber */
+      --danger: #ef4444;     /* Red */
+      --dark-accent: #1e293b;
+      
+      --font-ui: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      
+      --radius: 12px;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      --shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      font-family: var(--font-ui);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* --- HEADER --- */
+    .header {
+      display: flex; justify-content: space-between; align-items: center;
+      background: var(--dark-accent); color: white;
+      height: 60px; padding: 0 24px; box-shadow: var(--shadow); z-index: 50;
+    }
+    .header-title { font-weight: 700; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;}
+    .header-clock { font-family: var(--font-mono); color: var(--primary); font-size: 1.1rem; font-weight: 700;}
+
+    /* --- LAYOUT GRID --- */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 320px 1fr 340px;
+      grid-template-rows: auto 1fr auto; /* Added top row for Top KPI Strip */
+      gap: 16px;
+      padding: 16px;
+      height: calc(100vh - 60px);
+      overflow: hidden;
+    }
+
+    /* Top KPI Strip */
+    .top-kpi-strip {
+      grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;
+      background: var(--bg-panel); border: 1px solid var(--border-solid); border-radius: 8px;
+      padding: 8px 24px; box-shadow: var(--shadow);
+    }
+    .top-kpi-item { display: flex; flex-direction: column; }
+    .top-kpi-lbl { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600;}
+    .top-kpi-val { font-size: 1.1rem; font-weight: 700; color: var(--dark-accent); font-family: var(--font-mono);}
+
+    .panel {
+      background: var(--bg-panel); border: 1px solid var(--border-solid); border-radius: var(--radius);
+      box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden;
+    }
+    .panel-head {
+      background: #f8fafc; border-bottom: 1px solid var(--border-solid); padding: 12px 16px;
+      font-weight: 600; font-size: 0.85rem; color: var(--secondary); text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .panel-body { padding: 16px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 16px;}
+
+    /* --- LEFT: EVENT PROFILE WIDGET --- */
+    .profile-card { background: #f8fafc; border: 1px solid var(--border-solid); border-radius: 8px; padding: 16px;}
+    .profile-title { font-size: 1.1rem; font-weight: 700; color: var(--text-main); margin-bottom: 4px;}
+    .profile-venue { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px; display: flex; align-items: center; gap:4px;}
+    
+    .data-group { margin-bottom: 16px; }
+    .data-lbl { font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin-bottom: 4px; }
+    .data-val { font-size: 1.5rem; font-weight: 700; color: var(--dark-accent); }
+    .data-sub { font-size: 0.8rem; color: var(--text-muted); margin-top: 6px; line-height: 1.6;}
+
+    .history-box {
+      background: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.2);
+      border-left: 4px solid var(--secondary); padding: 12px; border-radius: 4px;
+    }
+    .history-box h4 { font-size: 0.75rem; color: var(--secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;}
+    .history-box p { font-size: 0.8rem; color: var(--text-main); line-height: 1.5; }
+
+    /* --- CENTER: MAP, CHART & DECK OF CARDS --- */
+    .center-col { display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
+    
+    .map-widget { flex: 1; border-radius: var(--radius); border: 1px solid var(--border-solid); overflow: hidden; box-shadow: var(--shadow); position: relative;}
+    #leafletMap { width: 100%; height: 100%; }
+    
+    .forecast-widget { height: 250px; display: flex; flex-direction: column;}
+    .chart-wrapper { flex: 1; padding: 0 16px 16px 16px; position: relative; min-height: 0; }
+    
+    .deck-container {
+      display: flex; gap: 12px; overflow-x: auto; padding: 12px 16px; background: #f8fafc;
+      border-bottom: 1px solid var(--border-solid); min-height: 85px; align-items: stretch;
+    }
+    .event-card {
+      min-width: 200px; background: white; border: 1px solid var(--border-solid); border-radius: 8px;
+      padding: 10px 12px; cursor: pointer; transition: all 0.2s ease; flex-shrink: 0; box-shadow: var(--shadow);
+      display: flex; flex-direction: column; justify-content: center;
+    }
+    .event-card:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: var(--shadow-hover);}
+    .event-card.active { border-color: var(--primary); border-width: 2px; background: rgba(14, 165, 233, 0.05); }
+    .ec-time { font-family: var(--font-mono); font-size: 0.7rem; color: var(--primary); font-weight: 600; margin-bottom: 4px;}
+    .ec-title { font-size: 0.85rem; font-weight: 700; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* --- RIGHT: DECISION SUPPORT ENGINE --- */
+    .engine-intro { background: #f8fafc; border: 1px solid var(--border-solid); border-radius: 8px; padding: 12px; margin-bottom: 16px;}
+    .engine-intro h4 { font-size: 0.75rem; color: var(--primary); text-transform: uppercase; margin-bottom: 6px;}
+    .desc-text { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; }
+    
+    .status-badge { background: #d1fae5; color: #047857; font-weight: 700; font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; border: 1px solid #10b981; }
+    
+    .resource-plan-card { border: 1px solid var(--border-solid); border-radius: 8px; padding: 12px; background: white; margin-bottom: 16px; font-size: 0.8rem;}
+    
+    .action-list { display: flex; flex-direction: column; gap: 12px; }
+    .action-card { border: 1px solid var(--border-solid); border-radius: 8px; padding: 14px; transition: all 0.3s ease; background: white; }
+    .action-card.authorized { border-color: var(--success); background: rgba(16, 185, 129, 0.05); }
+    
+    .ac-head { margin-bottom: 10px; }
+    .ac-title { font-size: 0.95rem; font-weight: 700; color: var(--text-main); }
+    
+    /* Rich Action Card Details */
+    .ac-rich-desc { background: #f8fafc; border: 1px solid var(--border-solid); border-radius: 6px; padding: 10px; margin-bottom: 12px; font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;}
+    .ac-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0; padding: 8px 0; border-top: 1px dashed var(--border-solid); border-bottom: 1px dashed var(--border-solid);}
+    .ac-highlight { color: var(--text-main); font-weight: 600; }
+    
+    .btn-row { display: flex; gap: 8px; }
+    .btn { flex: 1; padding: 8px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; border: none; transition: 0.2s; }
+    .btn-sim { background: white; border: 1px solid var(--border-solid); color: var(--text-main); }
+    .btn-sim:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-auth { background: var(--primary); color: white; }
+    .btn-auth:hover { background: #0284c7; }
+    .authorized .btn { display: none; }
+    .auth-badge { display: none; color: var(--success); font-size: 0.8rem; font-weight: 600; align-items: center; gap: 6px; }
+    .authorized .auth-badge { display: flex; }
+
+    /* Simulation Results Block */
+    .sim-block { display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid var(--border-solid); border-radius: 8px; padding: 12px; margin-top: 16px; font-size: 0.8rem;}
+
+    /* --- BOTTOM STRIP: KPI WIDGETS --- */
+    .bottom-kpi-strip {
+      grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+    }
+    
+    /* Height reduction applied strictly to these block styles */
+    .kpi-block {
+      background: var(--dark-accent); border-radius: var(--radius); 
+      padding: 10px 14px; /* Reduced from 12px 16px */
+      color: white; box-shadow: var(--shadow);
+    }
+    .kpi-lbl { 
+      font-size: 0.65rem; /* Reduced from 0.75rem */
+      text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; font-weight: 600; 
+      margin-bottom: 2px; /* Reduced from 4px */
+    }
+    .kpi-val { 
+      font-family: var(--font-mono); 
+      font-size: 1.4rem; /* Reduced from 1.8rem */
+      font-weight: 700; color: white;
+      line-height: 1; /* Tighter line height */
+    }
+    .kpi-sub { 
+      font-size: 0.7rem; /* Reduced from 0.8rem */
+      color: #cbd5e1; 
+      margin-top: 5px; /* Reduced from 6px */
+      padding-top: 5px; /* Reduced from 6px */
+      border-top: 1px solid rgba(255,255,255,0.1); 
+      line-height: 1.3; /* Reduced from 1.4 */
+    }
+    
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+  <!-- TOP HEADER -->
+  <header class="header">
+    <div class="header-title">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="3"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      FlowState Ops <span style="font-weight:400; color:#cbd5e1;">- AI Event Congestion Decision Support System</span>
+    </div>
+    <div class="header-clock" id="liveClock">18:14:09 PM</div>
+  </header>
+
+  <div class="dashboard-grid">
+
+    <!-- Top KPI Strip -->
+    <div class="top-kpi-strip">
+      <div class="top-kpi-item"><span class="top-kpi-lbl">Event Impact Score</span><span class="top-kpi-val" id="top-score">92</span></div>
+      <div class="top-kpi-item"><span class="top-kpi-lbl">Peak Delay</span><span class="top-kpi-val" id="top-delay">51 mins</span></div>
+      <div class="top-kpi-item"><span class="top-kpi-lbl">Affected Roads</span><span class="top-kpi-val" id="top-roads">17</span></div>
+      <div class="top-kpi-item"><span class="top-kpi-lbl">Officers Needed</span><span class="top-kpi-val" id="top-cops">126</span></div>
+      <div class="top-kpi-item"><span class="top-kpi-lbl">Confidence</span><span class="top-kpi-val" style="color:var(--success)" id="top-conf">89%</span></div>
+    </div>
+
+    <!-- LEFT PANEL: EVENT PROFILE -->
+    <aside class="panel">
+      <div class="panel-head">Event Profile Ingestion</div>
+      <div class="panel-body">
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">Data fused from ticketing APIs, venue manifests, and historical anomaly tracking.</p>
+        
+        <div class="profile-card">
+          <div class="profile-title" id="ui-event-name">Cricket Match Dispersal</div>
+          <div class="profile-venue" id="ui-event-venue">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            Chinnaswamy Stadium
+          </div>
+
+          <div class="data-group">
+            <div class="data-lbl">Event Impact Score</div>
+            <div class="data-val"><span id="ui-score">92</span> <span style="font-size: 1rem; color: var(--text-muted); font-weight: 500;">/ 100</span></div>
+            <div class="data-sub" id="ui-score-details">
+              <strong class="ac-highlight">Based On</strong><br>
+              • Expected Crowd: 40,000<br>
+              • Historical Similarity: 91%<br>
+              • Peak Hour Overlap<br>
+              • CBD Route Dependency<br><br>
+              <strong class="ac-highlight">Forecast Confidence: <span style="color: var(--success);">89%</span></strong>
+            </div>
+          </div>
+
+          <div class="data-group">
+            <div class="data-lbl">Critical Congestion Window</div>
+            <div class="data-val" id="ui-time-window" style="font-size: 1.25rem;">19:15 - 21:45</div>
+            <div class="data-sub" id="ui-time-sub">
+              Peak Delay Forecast: <span style="font-weight:700; color:var(--dark-accent)">51 mins</span><br>
+              Affected Junctions: <span style="font-weight:700; color:var(--dark-accent)">47</span>
+            </div>
+          </div>
+
+          <div class="history-box" id="ui-history-box">
+            <h4>WHY THIS EVENT IS HIGH RISK</h4>
+            <p>
+              <strong class="ac-highlight">Similar Events</strong><br>
+              IPL Final 2023 (Similarity: 91%)<br>
+              IPL Semi Final 2024 (Similarity: 88%)<br><br>
+              <strong class="ac-highlight">Observed Outcomes</strong><br>
+              • 47 Junctions affected<br>
+              • Delay peaked at 54 mins<br>
+              • Diversion B reduced congestion 41%<br><br>
+              <strong class="ac-highlight">AI Confidence:</strong> 89%
+            </p>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER COLUMN: MAP + FORECAST DECK -->
+    <main class="center-col">
+      <div class="map-widget"><div id="leafletMap"></div></div>
+
+      <div class="panel forecast-widget">
+        <div class="deck-container" id="deckContainer"></div>
+
+        <div class="panel-head" style="border:none; display:flex; justify-content:space-between; align-items:center;">
+          <span style="color:var(--text-main);">The Future: Impact Forecast</span>
+          <span style="color:var(--primary); font-family:var(--font-mono);">+3 HOUR PROJECTION</span>
+        </div>
+        
+        <div class="chart-wrapper"><canvas id="predictionChart"></canvas></div>
+      </div>
+    </main>
+
+    <!-- RIGHT PANEL: DECISION SUPPORT ENGINE -->
+    <aside class="panel">
+      <div class="panel-head">Decision Support Engine</div>
+      <div class="panel-body">
+        
+        <div class="engine-intro">
+          <h4>AI Recommendation Engine</h4>
+          <p class="desc-text" id="ui-desc-text">
+            Historical events, current traffic, road capacity and event schedules indicate a <strong>91% probability</strong> of severe congestion during dispersal.<br><br>
+            The actions below are ranked by expected congestion reduction.
+          </p>
+        </div>
+
+        <div class="resource-plan-card" id="ui-res-plan">
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <strong class="ac-highlight" style="font-size:0.85rem">RESOURCE PLAN</strong>
+            <span class="status-badge">READY</span>
+          </div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+            <div><span class="ac-highlight">Required</span><br>126 Officers<br>32 Barricades<br>4 Tow Trucks<br>2 Ambulances</div>
+            <div><span class="ac-highlight">Available</span><br>140 Officers<br>40 Barricades<br>6 Tow Trucks<br>3 Ambulances</div>
+          </div>
+        </div>
+
+        <div class="action-list" id="actionContainer"></div>
+
+        <div class="sim-block">
+          <div style="display:flex; flex-direction:column; align-items:center; width:33%">
+            <span style="color:var(--text-muted)">Without Action</span><strong style="color:var(--danger); font-size:1.1rem" id="sim-bad">51 mins</strong>
+          </div>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+          <div style="display:flex; flex-direction:column; align-items:center; width:33%">
+            <span style="color:var(--text-muted)">With Action</span><strong style="color:var(--success); font-size:1.1rem" id="sim-good">18 mins</strong>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:center; width:33%; border-left:1px solid var(--border-solid)">
+            <span style="color:var(--text-muted)">Reduction</span><strong style="color:var(--primary); font-size:1.1rem" id="sim-red">64%</strong>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- BOTTOM KPI STRIP -->
+    <div class="bottom-kpi-strip">
+      <div class="kpi-block">
+        <div class="kpi-lbl">Affected Intersections</div>
+        <div class="kpi-val" id="kpi-1">47</div>
+        <div class="kpi-sub" id="kpi-1-sub">
+          Expected To Reach <strong style="color:var(--danger)">LOS E/F</strong><br>
+          <span style="color:var(--warning)">+24 vs baseline</span>
+        </div>
+      </div>
+      <div class="kpi-block">
+        <div class="kpi-lbl">Diversion Readiness</div>
+        <div class="kpi-val" id="kpi-2">68%</div>
+        <div class="kpi-sub" id="kpi-2-sub">
+          <span style="color:var(--success)">Route B Ready</span><br>
+          <span style="color:var(--warning)">Route C Pending Approval</span>
+        </div>
+      </div>
+      <div class="kpi-block">
+        <div class="kpi-lbl">Field Staff Needed</div>
+        <div class="kpi-val" id="kpi-3">126</div>
+        <div class="kpi-sub" id="kpi-3-sub">
+          <strong style="color:white">Predicted Need</strong><br>
+          Based on 47 Junctions, 40,000 Attendees
+        </div>
+      </div>
+      <div class="kpi-block">
+        <div class="kpi-lbl">Post-Event Learning</div>
+        <div class="kpi-val" id="kpi-4">91%</div>
+        <div class="kpi-sub" id="kpi-4-sub">
+          <strong style="color:white">Coverage</strong><br>
+          12 Similar Events (Prediction Acc: 88%)
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. DATA: 6 BENGALURU EVENTS
+    // ==========================================
+    const eventsData = [
+      {
+        id: 0, title: "Bengaluru City Overview", venue: "Aggregated City Grid", lat: 12.9716, lng: 77.5946, time: "All Day",
+        score: 92, crowd: "345,000+", delay: "51 mins", roads: 17, cops: 126, conf: "89%", peak: "19:15 - 21:45",
+        peakDelay: "51 mins", junctions: 47, simEvs: "Citywide Baseline", simAcc: "91%", zoom: 12,
+        baseChart: [15, 20, 25, 30, 40, 55, 60, 50, 30, 20],
+        actions: [
+          { title: "Broadcast City-Wide Advisory", mitigation: 10, targetDelay: "41 mins", targetQueue: "15km -> 10km", res: "2 VMS Signs", reason: "92% Base Similarity", histSucc: "20% Reduction", usedIn: "City Default Protocol" }
+        ],
+        kpiVals: { v1: "112", v2: "45%", v3: "345", v4: "82%" }
+      },
+      {
+        id: 1, title: "Cricket Match Dispersal", venue: "Chinnaswamy Stadium", lat: 12.9788, lng: 77.5996, time: "18:00 - 22:30",
+        score: 92, crowd: "40,000", delay: "51 mins", roads: 17, cops: 126, conf: "89%", peak: "19:15 - 21:45",
+        peakDelay: "51 mins", junctions: 47, simEvs: "IPL Final 2023, Semi 2024", simAcc: "91%", zoom: 15,
+        baseChart: [5, 8, 12, 18, 25, 45, 52, 38, 15, 5],
+        actions: [
+          { title: "Establish BMTC Bus-Only Corridor", mitigation: 24, targetDelay: "51 → 27 mins", targetQueue: "3.2km → 1.1km", res: "24 Officers, 8 Barricades", reason: "91% Similarity to IPL Final 2023", histSucc: "41% Congestion Reduction", usedIn: "IPL Final 2023, IPL Semi 2024" },
+          { title: "MG Road API Navigation Reroute", mitigation: 15, targetDelay: "27 → 12 mins", targetQueue: "1.1km → 0.4km", res: "12 Officers, 2 VMS", reason: "90% Similarity to IPL Semi 2024", histSucc: "30% Route Divert", usedIn: "IPL Group Stages" }
+        ],
+        kpiVals: { v1: "47", v2: "68%", v3: "126", v4: "91%" }
+      },
+      {
+        id: 2, title: "Global Tech Summit", venue: "Palace Grounds", lat: 13.0035, lng: 77.5855, time: "09:00 - 18:00",
+        score: 85, crowd: "15,000", delay: "42 mins", roads: 12, cops: 85, conf: "94%", peak: "17:00 - 18:30",
+        peakDelay: "42 mins", junctions: 32, simEvs: "Aero India VIP Transit", simAcc: "94%", zoom: 15,
+        baseChart: [10, 15, 22, 28, 40, 48, 35, 20, 10, 5],
+        actions: [
+          { title: "Divert Airport Cabs (Hebbal Flyover)", mitigation: 20, targetDelay: "42 → 22 mins", targetQueue: "2.1km → 0.8km", res: "15 Officers, 3 VMS", reason: "94% Similarity to Aero India", histSucc: "35% Congestion Reduction", usedIn: "Invest Karnataka Summit" }
+        ],
+        kpiVals: { v1: "32", v2: "85%", v3: "85", v4: "94%" }
+      },
+      // Using generic mock data matching the new format for remaining events for functional clicks
+      { id: 3, title: "Religious Procession", venue: "Shivajinagar", lat: 12.9863, lng: 77.6044, time: "16:00 - 20:00", score: 78, crowd: "10,000", delay: "35 mins", roads: 8, cops: 45, conf: "82%", peak: "18:00 - 19:30", peakDelay: "35 mins", junctions: 24, simEvs: "Festival Procession 2023", simAcc: "82%", zoom: 16, baseChart: [15, 25, 38, 55, 42, 20, 10, 5, 2, 2], actions: [{ title: "Commercial St Lockdown", mitigation: 18, targetDelay: "35 → 17 mins", targetQueue: "1.5km → Pedestrian Only", res: "20 Officers, 30 Barricades", reason: "85% Similarity to St. Mary's Feast", histSucc: "Complete Vehicular Isolation", usedIn: "Annual Fest 2023" }], kpiVals: { v1: "24", v2: "50%", v3: "45", v4: "78%" } },
+      { id: 4, title: "Political Mega-Rally", venue: "National College Grounds", lat: 12.9490, lng: 77.5735, time: "10:00 - 14:00", score: 95, crowd: "85,000", delay: "65 mins", roads: 25, cops: 180, conf: "95%", peak: "13:30 - 15:30", peakDelay: "65 mins", junctions: 65, simEvs: "Elections Rally 2024", simAcc: "95%", zoom: 15, baseChart: [5, 10, 15, 20, 22, 18, 10, 5, 2, 2], actions: [{ title: "Activate Remote Bus Depots", mitigation: 30, targetDelay: "65 → 35 mins", targetQueue: "5km → 2km", res: "40 Officers, 4 Tows", reason: "95% Similarity to Assembly Rally", histSucc: "45% Reduction in illegally parked heavy vehicles", usedIn: "2024 Elections" }], kpiVals: { v1: "65", v2: "42%", v3: "180", v4: "88%" } },
+      { id: 5, title: "International Concert", venue: "BIEC, Tumkur Road", lat: 13.0519, lng: 77.4727, time: "19:00 - 23:30", score: 88, crowd: "25,000", delay: "45 mins", roads: 10, cops: 60, conf: "87%", peak: "23:00 - 01:00", peakDelay: "45 mins", junctions: 18, simEvs: "DJ Snake Tour 2023", simAcc: "87%", zoom: 14, baseChart: [5, 8, 12, 15, 20, 30, 45, 60, 40, 15], actions: [{ title: "Suspend Toll Collection", mitigation: 35, targetDelay: "45 → 10 mins", targetQueue: "4km → 0.5km", res: "5 Officers, Highway Auth", reason: "87% Similarity to NYE Gig", histSucc: "75% Throughput Increase", usedIn: "DJ Snake 2023" }], kpiVals: { v1: "18", v2: "90%", v3: "60", v4: "92%" } },
+      { id: 6, title: "City Marathon", venue: "Cubbon Park", lat: 12.9765, lng: 77.5936, time: "05:00 - 10:00", score: 65, crowd: "12,000", delay: "20 mins", roads: 5, cops: 35, conf: "98%", peak: "08:30 - 09:30", peakDelay: "20 mins", junctions: 12, simEvs: "TCS 10k 2024", simAcc: "98%", zoom: 15, baseChart: [20, 15, 10, 5, 2, 2, 2, 2, 2, 2], actions: [{ title: "Lift Barricades Early", mitigation: 8, targetDelay: "20 → 12 mins", targetQueue: "1km → Normal", res: "10 Officers", reason: "98% Similarity to TCS 10k", histSucc: "Instant network normalization", usedIn: "Annual Marathons" }], kpiVals: { v1: "12", v2: "100%", v3: "35", v4: "98%" } }
+    ];
+
+    // ==========================================
+    // 2. STATE & SETUP
+    // ==========================================
+    let activeId = 1; // Default to Cricket as requested
+    let authState = {}; 
+    let chartInstance = null;
+    let map = null;
+
+    setInterval(() => { document.getElementById('liveClock').innerText = new Date().toLocaleTimeString('en-US'); }, 1000);
+
+    function initMap() {
+      map = L.map('leafletMap', { zoomControl: false }).setView([12.9716, 77.5946], 12);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+
+      eventsData.forEach((ev) => {
+        if (ev.id === 0) return;
+        const marker = L.circleMarker([ev.lat, ev.lng], { radius: 8, color: '#ffffff', weight: 2, fillColor: 'var(--primary)', fillOpacity: 1 }).addTo(map);
+        marker.bindTooltip(`<b>${ev.title}</b>`, { direction: 'top', offset: [0, -10] });
+        marker.on('click', () => selectEvent(ev.id));
+      });
+    }
+
+    function buildDeck() {
+      const container = document.getElementById('deckContainer');
+      container.innerHTML = '';
+      eventsData.forEach(ev => {
+        const div = document.createElement('div');
+        div.className = `event-card ${ev.id === activeId ? 'active' : ''}`;
+        div.id = `card-${ev.id}`;
+        div.innerHTML = `<div class="ec-time">${ev.time}</div><div class="ec-title">${ev.title}</div>`;
+        div.onclick = () => selectEvent(ev.id);
+        container.appendChild(div);
+      });
+    }
+
+    function initChart() {
+      const ctx = document.getElementById('predictionChart').getContext('2d');
+      const timeLabels = ['16:00', '17:00', '18:00', '19:00', '20:00', '21:00(NOW)', '22:00', '23:00', '00:00', '01:00'];
+      
+      const gradBlue = ctx.createLinearGradient(0,0,0,200); gradBlue.addColorStop(0, 'rgba(14, 165, 233, 0.2)'); gradBlue.addColorStop(1, 'transparent');
+      const gradRed = ctx.createLinearGradient(0,0,0,200); gradRed.addColorStop(0, 'rgba(239, 68, 68, 0.2)'); gradRed.addColorStop(1, 'transparent');
+
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: timeLabels,
+          datasets: [
+            { label: 'Logged Traffic (Past/Present)', data: [0,0,0,0,0,0,null,null,null,null], borderColor: '#0ea5e9', backgroundColor: gradBlue, borderWidth: 3, fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: '#0ea5e9' },
+            { label: 'AI Projected Delay (No Action)', data: [null,null,null,null,null,0,0,0,0,0], borderColor: '#ef4444', backgroundColor: gradRed, borderWidth: 3, borderDash: [5, 5], fill: true, tension: 0.4, pointRadius: 0 }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: {family: 'Inter'} } },
+            annotation: { annotations: { line1: { type: 'line', xMin: '21:00(NOW)', xMax: '21:00(NOW)', borderColor: '#64748b', borderWidth: 2, borderDash: [3, 3], label: { display: true, content: 'PRESENT', position: 'start', backgroundColor: '#1e293b', font: {family: 'JetBrains Mono', size: 10} } } } }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: '#64748b', font: {size: 10} } },
+            y: { grid: { color: '#e2e8f0' }, ticks: { color: '#64748b' }, max: 70, title: {display: true, text: 'Delay Impact (Mins)'} }
+          }
+        }
+      });
+    }
+
+    // ==========================================
+    // 4. LOGIC ENGINE
+    // ==========================================
+    function selectEvent(id) {
+      activeId = id;
+      const ev = eventsData.find(e => e.id === id);
+
+      // Deck
+      document.querySelectorAll('.event-card').forEach(c => c.classList.remove('active'));
+      document.getElementById(`card-${id}`).classList.add('active');
+
+      // Top Strip
+      document.getElementById('top-score').innerText = ev.score;
+      document.getElementById('top-delay').innerText = ev.delay;
+      document.getElementById('top-roads').innerText = ev.roads;
+      document.getElementById('top-cops').innerText = ev.cops;
+      document.getElementById('top-conf').innerText = ev.conf;
+
+      // Left Profile
+      document.getElementById('ui-event-name').innerText = ev.title;
+      document.getElementById('ui-event-venue').innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> ${ev.venue}`;
+      document.getElementById('ui-score').innerText = ev.score;
+      
+      document.getElementById('ui-score-details').innerHTML = `
+        <strong class="ac-highlight">Based On</strong><br>
+        • Expected Crowd: ${ev.crowd}<br>
+        • Historical Similarity: ${ev.simAcc}<br>
+        • Peak Hour Overlap<br>
+        • CBD Route Dependency<br><br>
+        <strong class="ac-highlight">Forecast Confidence: <span style="color:var(--success);">${ev.conf}</span></strong>
+      `;
+
+      document.getElementById('ui-time-window').innerText = ev.peak;
+      document.getElementById('ui-time-sub').innerHTML = `
+        Peak Delay Forecast: <span style="font-weight:700; color:var(--dark-accent)">${ev.peakDelay}</span><br>
+        Affected Junctions: <span style="font-weight:700; color:var(--dark-accent)">${ev.junctions}</span>
+      `;
+
+      document.getElementById('ui-history-box').innerHTML = `
+        <h4>WHY THIS EVENT IS HIGH RISK</h4>
+        <p>
+          <strong class="ac-highlight">Similar Events</strong><br>
+          ${ev.simEvs} (Similarity: ${ev.simAcc})<br><br>
+          <strong class="ac-highlight">Observed Outcomes</strong><br>
+          • ${ev.junctions} Junctions affected<br>
+          • Delay peaked at ${ev.peakDelay}<br><br>
+          <strong class="ac-highlight">AI Confidence:</strong> ${ev.conf}
+        </p>
+      `;
+
+      // Map
+      map.flyTo([ev.lat, ev.lng], ev.zoom, { animate: true, duration: 1 });
+
+      // KPI Bottom
+      document.getElementById('kpi-1').innerText = ev.kpiVals.v1;
+      document.getElementById('kpi-1-sub').innerHTML = `Expected To Reach <strong style="color:var(--danger)">LOS E/F</strong><br><span style="color:var(--warning)">+24 vs baseline</span>`;
+      
+      document.getElementById('kpi-2').innerText = ev.kpiVals.v2;
+      document.getElementById('kpi-2-sub').innerHTML = `<span style="color:var(--success)">Route B Ready</span><br><span style="color:var(--warning)">Route C Pending Approval</span>`;
+
+      document.getElementById('kpi-3').innerText = ev.kpiVals.v3;
+      document.getElementById('kpi-3-sub').innerHTML = `<strong style="color:white">Predicted Need</strong><br>Based on ${ev.junctions} Junctions, ${ev.crowd} Attendees`;
+
+      document.getElementById('kpi-4').innerText = ev.kpiVals.v4;
+      document.getElementById('kpi-4-sub').innerHTML = `<strong style="color:white">Coverage</strong><br>12 Similar Events (Prediction Acc: 88%)`;
+
+      // Right Panel Actions
+      const actCon = document.getElementById('actionContainer');
+      actCon.innerHTML = '';
+      
+      document.getElementById('ui-desc-text').innerHTML = `
+        Historical events, current traffic, road capacity and event schedules indicate a <strong>${ev.simAcc} probability</strong> of severe congestion during dispersal.<br><br>
+        The actions below are ranked by expected congestion reduction.
+      `;
+
+      // Resource Plan Updater
+      document.getElementById('ui-res-plan').innerHTML = `
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+          <strong class="ac-highlight" style="font-size:0.85rem">RESOURCE PLAN</strong>
+          <span class="status-badge">READY</span>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div><span class="ac-highlight">Required</span><br>${ev.cops} Officers<br>32 Barricades<br>4 Tow Trucks<br>2 Ambulances</div>
+          <div><span class="ac-highlight">Available</span><br>${Math.floor(ev.cops*1.2)} Officers<br>40 Barricades<br>6 Tow Trucks<br>3 Ambulances</div>
+        </div>
+      `;
+
+      ev.actions.forEach((act, idx) => {
+        const aKey = `${ev.id}_${idx}`;
+        const isAuth = authState[aKey];
+        
+        let d = document.createElement('div');
+        d.className = `action-card ${isAuth ? 'authorized' : ''}`;
+        d.id = `actionCard_${aKey}`;
+        
+        d.innerHTML = `
+          <div class="ac-head">
+            <span class="ac-title">${act.title}</span>
+          </div>
+          <div class="ac-rich-desc">
+            <div style="margin-bottom:8px;"><strong class="ac-highlight">Reason:</strong> ${act.reason}</div>
+            <div class="ac-grid">
+              <div><strong class="ac-highlight">Expected Impact</strong><br>Delay: ${act.targetDelay}<br>Queue: ${act.targetQueue}</div>
+              <div><strong class="ac-highlight">Resources</strong><br>${act.res}</div>
+            </div>
+            <div>
+              <strong class="ac-highlight">Why Recommended?</strong><br>
+              Historical Success: ${act.histSucc}<br>
+              Used in: ${act.usedIn}
+            </div>
+            <div style="margin-top:8px;"><strong class="ac-highlight">Confidence: <span style="color:var(--success)">${ev.conf}</span></strong></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-sim" onclick="simAuth(false, '${aKey}', ${act.mitigation})">What-If Simulate</button>
+            <button class="btn btn-auth" onclick="simAuth(true, '${aKey}', ${act.mitigation})">Authorize</button>
+            <div class="auth-badge">✓ Active & Deployed</div>
+          </div>
+        `;
+        actCon.appendChild(d);
+      });
+
+      refreshChart(ev);
+    }
+
+    function simAuth(auth, key, mitig) {
+      if (auth) { authState[key] = true; document.getElementById(`actionCard_${key}`).classList.add('authorized'); }
+      refreshChart(eventsData.find(e => e.id === activeId));
+    }
+
+    function refreshChart(ev) {
+      let pastData = ev.baseChart.map((v, i) => i <= 5 ? v : null);
+      let futureData = ev.baseChart.map((v, i) => i >= 5 ? v : null);
+
+      let totMitig = 0;
+      ev.actions.forEach((act, idx) => { if(authState[`${ev.id}_${idx}`]) totMitig += act.mitigation; });
+
+      if (totMitig > 0) futureData = futureData.map((val, idx) => { return val !== null ? (idx === 5 ? val : Math.max(5, val - totMitig)) : null; });
+
+      chartInstance.data.datasets[0].data = pastData;
+      chartInstance.data.datasets[1].data = futureData;
+
+      let maxF = Math.max(...futureData.map(v=>v||0));
+      let nColor = maxF < 30 ? '#10b981' : (maxF < 45 ? '#f59e0b' : '#ef4444');
+
+      chartInstance.data.datasets[1].borderColor = nColor;
+      const grad = chartInstance.ctx.createLinearGradient(0,0,0,200);
+      grad.addColorStop(0, `${nColor}33`); grad.addColorStop(1, 'transparent');
+      chartInstance.data.datasets[1].backgroundColor = grad;
+      chartInstance.update();
+
+      // Update Simulation Block Math
+      let basePeak = Math.max(...ev.baseChart);
+      let newPeak = Math.max(...futureData.map(v=>v||0));
+      let reduct = Math.round(((basePeak - newPeak) / basePeak) * 100);
+
+      document.getElementById('sim-bad').innerText = `${basePeak} mins`;
+      document.getElementById('sim-good').innerText = `${newPeak} mins`;
+      document.getElementById('sim-red').innerText = `${reduct}%`;
+    }
+
+    window.onload = () => { initMap(); initChart(); buildDeck(); selectEvent(1); };
+  </script>
+</body>
+</html>
