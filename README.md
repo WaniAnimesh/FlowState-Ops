@@ -1,7 +1,3 @@
-Yes. For a hackathon repository, the README should be concise, easy to scan, and focused on the value proposition rather than explaining every model in detail.
-
----
-
 # FlowState Ops 🚦
 
 ### AI Event Congestion Decision Support System
@@ -206,6 +202,7 @@ FlowState Ops continuously adapts as new incidents occur.
 
 <img width="1763" height="844" alt="image" src="https://github.com/user-attachments/assets/0c02a044-8022-44d0-8a46-6001288f4340" />
 
+Demo Link: https://htmlpreview.github.io/?https://github.com/WaniAnimesh/FlowState-Ops/blob/main/FlowState-Ops__Demo.html
 
 ## Vision
 
