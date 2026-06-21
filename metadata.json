@@ -1,0 +1,6 @@
+{
+  "name": "FlowState Ops",
+  "description": "AI Event Congestion Decision Support System shifting traffic management from reactive to predictive in Bengaluru.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
